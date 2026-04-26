@@ -1,0 +1,39 @@
+{
+  "name": "@inferagraph/gremlin-datasource",
+  "version": "0.1.0",
+  "description": "Apache TinkerPop Gremlin datasource for InferaGraph",
+  "repository": { "type": "git", "url": "git+https://github.com/inferagraph/gremlin-datasource.git" },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@inferagraph/core": "^0.1.0"
+  },
+  "dependencies": {
+    "gremlin": "^3.7.0"
+  },
+  "devDependencies": {
+    "@inferagraph/core": "file:../inferagraph",
+    "@vitest/coverage-v8": "^3.1.1",
+    "tsup": "^8.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.1"
+  }
+}
