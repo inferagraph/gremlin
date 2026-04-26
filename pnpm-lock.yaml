@@ -15,6 +15,9 @@ importers:
       '@inferagraph/core':
         specifier: ^0.1.0
         version: 0.1.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@types/gremlin':
+        specifier: ^3.6.7
+        version: 3.6.7
       '@vitest/coverage-v8':
         specifier: ^3.1.1
         version: 3.2.4(vitest@3.2.4)
@@ -388,6 +391,9 @@ packages:
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
+
+  '@types/gremlin@3.6.7':
+    resolution: {integrity: sha512-qbzClMUhVb2+6XOtAwUnNtVmDeBsvAYXyoQYIvQcv9pQkk7z+Fct0o59rYCyLf4R47Xlg7U+6lvUkP3Ec/XRdg==}
 
   '@vitest/coverage-v8@3.2.4':
     resolution: {integrity: sha512-EyF9SXU6kS5Ku/U82E259WSnvg6c8KTjppUncuNdm5QHpe17mwREHnjDzozC8x9MZ0xfBUFSaLkRv4TMA75ALQ==}
@@ -1256,6 +1262,8 @@ snapshots:
   '@types/deep-eql@4.0.2': {}
 
   '@types/estree@1.0.8': {}
+
+  '@types/gremlin@3.6.7': {}
 
   '@vitest/coverage-v8@3.2.4(vitest@3.2.4)':
     dependencies:

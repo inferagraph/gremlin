@@ -1,6 +1,6 @@
 import { Datasource } from '@inferagraph/core';
 import type {
-  DataAdapterConfig, GraphData, NodeId, NodeData,
+  DataAdapterConfig, GraphData, NodeId, NodeData, EdgeData,
   ContentData, PaginationOptions, PaginatedResult, DataFilter,
 } from '@inferagraph/core';
 import gremlin from 'gremlin';
@@ -238,7 +238,7 @@ export class GremlinDatasource extends Datasource {
     return { id, attributes };
   }
 
-  private transformEdges(items: unknown[]): Array<{ id: string; sourceId: string; targetId: string; attributes: Record<string, unknown> }> {
+  private transformEdges(items: unknown[]): EdgeData[] {
     return items.map((edge: unknown) => {
       const e = edge as Record<string, unknown>;
       const outV = e.outV as Record<string, unknown> | string | undefined;
