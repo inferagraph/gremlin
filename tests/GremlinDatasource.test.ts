@@ -237,6 +237,37 @@ describe('GremlinDatasource', () => {
         { nodeId: 'v1', depth: 1 },
       );
     });
+
+    it('should fetch edges with bothE().dedup() (composite-key safe) and filter dangling endpoints client-side', async () => {
+      const neighbors = [makeVertex('v2', 'person')];
+      const origin = [makeVertex('v1', 'person')];
+      // Server returns four edges: v1↔v2 (in-set), v1→v99 (dangling), v2→v100 (dangling)
+      const edges = [
+        makeEdge('e1', 'v1', 'v2', 'knows'),
+        makeEdge('e2', 'v1', 'v99', 'knows'),
+        makeEdge('e3', 'v2', 'v100', 'knows'),
+      ];
+
+      mockSubmit
+        .mockResolvedValueOnce({ _items: neighbors })
+        .mockResolvedValueOnce({ _items: origin })
+        .mockResolvedValueOnce({ _items: edges });
+
+      const result = await ds.getNeighbors('v1', 1);
+
+      // Edge fetch uses bothE().dedup() — NOT within() — and bound ids
+      // are passed straight through (here the default getCompositeKey
+      // is identity, so they're the bare ids).
+      expect(mockSubmit).toHaveBeenNthCalledWith(
+        3,
+        'g.V(ids).bothE().dedup()',
+        { ids: ['v1', 'v2'] },
+      );
+
+      // Only the v1↔v2 edge survives client-side filtering.
+      expect(result.edges).toHaveLength(1);
+      expect(result.edges[0].id).toBe('e1');
+    });
   });
 
   describe('findPath', () => {
@@ -288,6 +319,34 @@ describe('GremlinDatasource', () => {
       const result = await ds.findPath('v1', 'v2');
       expect(result.nodes).toHaveLength(2);
       expect(result.nodes.every(n => !('inV' in n))).toBe(true);
+    });
+
+    it('should terminate with has(T.id, toId), not hasId(toId), and pass toId as a bare id', async () => {
+      mockSubmit.mockResolvedValueOnce({ _items: [] });
+
+      await ds.findPath('v1', 'v2');
+
+      const [query, bindings] = mockSubmit.mock.calls[0];
+      expect(query).toContain('has(T.id, toId)');
+      expect(query).not.toContain('hasId(');
+      // toId is bare — it must NOT be wrapped by getCompositeKey, since
+      // T.id is compared against the document id, not the partition pair.
+      expect(bindings).toEqual({ fromId: 'v1', toId: 'v2' });
+    });
+
+    it('should pass toId bare even when getCompositeKey is configured', async () => {
+      const cosmosDs = new GremlinDatasource({
+        ...cosmosConfig,
+        getCompositeKey: (id: string) => [id, id] as [string, string],
+      });
+      await cosmosDs.connect();
+      mockSubmit.mockResolvedValueOnce({ _items: [] });
+
+      await cosmosDs.findPath('v1', 'v2');
+
+      const [, bindings] = mockSubmit.mock.calls[0];
+      // fromId is composite (used in g.V(...)) — toId is bare (used in has(T.id, ...)).
+      expect(bindings).toEqual({ fromId: ['v1', 'v1'], toId: 'v2' });
     });
   });
 
@@ -442,6 +501,124 @@ describe('GremlinDatasource', () => {
       });
       const result = await ds.getContent('v1');
       expect(result!.contentType).toBe('text');
+    });
+  });
+
+  describe('getType config option', () => {
+    it('defaults to using the Gremlin label as the semantic type', async () => {
+      const defaultDs = new GremlinDatasource(defaultConfig);
+      await defaultDs.connect();
+      mockSubmit.mockResolvedValueOnce({
+        _items: [makeVertex('v1', 'person', { name: [{ value: 'Alice' }] })],
+      });
+      const result = await defaultDs.getNode('v1');
+      expect(result!.attributes.type).toBe('person');
+    });
+
+    it('uses getType to read the type from a property when configured', async () => {
+      // Host-style: every vertex carries a constant label and the real
+      // type lives on a property. The library must surface the property.
+      const hostConfig: GremlinDatasourceConfig = {
+        ...defaultConfig,
+        getType: (v) => {
+          const t = v.properties?.type as Array<{ value?: unknown }> | undefined;
+          return (t?.[0]?.value as string | undefined) ?? v.label;
+        },
+      };
+      const hostDs = new GremlinDatasource(hostConfig);
+      await hostDs.connect();
+      mockSubmit.mockResolvedValueOnce({
+        _items: [makeVertex('v1', 'Unit', {
+          name: [{ value: 'Abraham' }],
+          type: [{ value: 'person' }],
+        })],
+      });
+      const result = await hostDs.getNode('v1');
+      expect(result!.attributes.type).toBe('person');
+    });
+
+    it('falls back to v.label when getType returns undefined', async () => {
+      const hostConfig: GremlinDatasourceConfig = {
+        ...defaultConfig,
+        getType: () => undefined,
+      };
+      const hostDs = new GremlinDatasource(hostConfig);
+      await hostDs.connect();
+      mockSubmit.mockResolvedValueOnce({
+        _items: [makeVertex('v1', 'person', {})],
+      });
+      const result = await hostDs.getNode('v1');
+      // getType returned undefined → fall back to v.label.
+      expect(result!.attributes.type).toBe('person');
+    });
+
+    it('library honors getType even when no property by that name exists on the vertex', async () => {
+      // Red→green proof for the getType wiring itself.
+      //
+      // The previous test ("uses getType to read the type from a property")
+      // happened to pass against an implementation that ignored getType
+      // entirely, because `transformVertex` blindly copies every property
+      // into `attributes`. With a `type` property on the vertex, that loop
+      // overwrote `attributes.type = v.label` with the property value —
+      // a coincidence that masked whether getType was wired in at all.
+      //
+      // This test removes the coincidence: the vertex has a label of
+      // 'Unit' and NO `type` property. Only an implementation that
+      // actually invokes `config.getType` can produce 'person' here.
+      const hostConfig: GremlinDatasourceConfig = {
+        ...defaultConfig,
+        getType: () => 'person',
+      };
+      const hostDs = new GremlinDatasource(hostConfig);
+      await hostDs.connect();
+      mockSubmit.mockResolvedValueOnce({
+        _items: [makeVertex('v1', 'Unit', { name: [{ value: 'Abraham' }] })],
+      });
+      const result = await hostDs.getNode('v1');
+      expect(result!.attributes.type).toBe('person');
+    });
+  });
+
+  describe('nameProperty config option', () => {
+    it('defaults to searching the "name" property', async () => {
+      const defaultDs = new GremlinDatasource(defaultConfig);
+      await defaultDs.connect();
+      mockSubmit.mockResolvedValueOnce({ _items: [] });
+      await defaultDs.search('alice');
+      expect(mockSubmit).toHaveBeenCalledWith(
+        `g.V().has('name', TextP.containing(query))`,
+        { query: 'alice' },
+      );
+    });
+
+    it('uses the configured nameProperty in search() and filter({ search })', async () => {
+      const titleDs = new GremlinDatasource({ ...defaultConfig, nameProperty: 'title' });
+      await titleDs.connect();
+
+      mockSubmit.mockResolvedValueOnce({ _items: [] });
+      await titleDs.search('alice');
+      expect(mockSubmit).toHaveBeenLastCalledWith(
+        `g.V().has('title', TextP.containing(query))`,
+        { query: 'alice' },
+      );
+
+      mockSubmit.mockResolvedValueOnce({ _items: [] });
+      await titleDs.filter({ search: 'alice' });
+      expect(mockSubmit).toHaveBeenLastCalledWith(
+        `g.V().has('title', TextP.containing(searchText))`,
+        { searchText: 'alice' },
+      );
+    });
+
+    it('surfaces the configured nameProperty value on the transformed node', async () => {
+      const titleDs = new GremlinDatasource({ ...defaultConfig, nameProperty: 'title' });
+      await titleDs.connect();
+      mockSubmit.mockResolvedValueOnce({
+        _items: [makeVertex('v1', 'doc', { title: [{ value: 'Genesis' }] })],
+      });
+      const result = await titleDs.search('gen');
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].attributes.title).toBe('Genesis');
     });
   });
 

@@ -4,7 +4,7 @@ import type {
   ContentData, PaginationOptions, PaginatedResult, DataFilter,
 } from '@inferagraph/core';
 import gremlin from 'gremlin';
-import type { GremlinDatasourceConfig } from './types.js';
+import type { GremlinDatasourceConfig, GremlinVertex } from './types.js';
 
 const { driver } = gremlin;
 
@@ -12,10 +12,12 @@ export class GremlinDatasource extends Datasource {
   readonly name = 'gremlin';
   private client: InstanceType<typeof driver.Client> | null = null;
   private config: GremlinDatasourceConfig;
+  private nameProperty: string;
 
   constructor(config: GremlinDatasourceConfig) {
     super();
     this.config = config;
+    this.nameProperty = config.nameProperty ?? 'name';
   }
 
   async connect(): Promise<void> {
@@ -59,18 +61,13 @@ export class GremlinDatasource extends Datasource {
     const nodeIds = nodes.map(n => n.id);
     if (nodeIds.length === 0) return { nodes: [], edges: [] };
 
-    const edgeResult = await this.client!.submit(
-      `g.V(ids).bothE().where(otherV().hasId(within(ids)))`,
-      { ids: nodeIds },
-    );
-    const edges = this.transformEdges(edgeResult._items || []);
-
+    const edges = await this.fetchEdgesAmongNodes(nodeIds);
     return { nodes, edges };
   }
 
   async getNode(id: NodeId): Promise<NodeData | undefined> {
     this.ensureConnected();
-    const result = await this.client!.submit('g.V(id)', { id });
+    const result = await this.client!.submit('g.V(id)', { id: this.resolveKey(id) });
     const items = result._items || [];
     if (items.length === 0) return undefined;
     return this.transformVertices(items)[0];
@@ -82,33 +79,32 @@ export class GremlinDatasource extends Datasource {
     // Get neighbors up to depth
     const vertexResult = await this.client!.submit(
       `g.V(nodeId).repeat(both().simplePath()).times(depth).dedup()`,
-      { nodeId, depth },
+      { nodeId: this.resolveKey(nodeId), depth },
     );
     const neighborNodes = this.transformVertices(vertexResult._items || []);
 
     // Also get the origin node
-    const originResult = await this.client!.submit('g.V(nodeId)', { nodeId });
+    const originResult = await this.client!.submit('g.V(nodeId)', { nodeId: this.resolveKey(nodeId) });
     const originNodes = this.transformVertices(originResult._items || []);
 
     const allNodes = [...originNodes, ...neighborNodes];
     const allNodeIds = allNodes.map(n => n.id);
 
-    // Get edges between all involved nodes
-    const edgeResult = await this.client!.submit(
-      `g.V(ids).bothE().where(otherV().hasId(within(ids)))`,
-      { ids: allNodeIds },
-    );
-    const edges = this.transformEdges(edgeResult._items || []);
-
+    const edges = await this.fetchEdgesAmongNodes(allNodeIds);
     return { nodes: allNodes, edges };
   }
 
   async findPath(fromId: NodeId, toId: NodeId): Promise<GraphData> {
     this.ensureConnected();
 
+    // Termination uses `has(T.id, toId)` rather than `hasId(toId)`. The
+    // canonical T.id token compares the document id on Cosmos and the
+    // vertex id on TinkerPop, and unlike `hasId()` it accepts a plain
+    // id (NOT a composite-key tuple) — which is what we want here, since
+    // the bound `toId` is the raw vertex id, not the partition pair.
     const result = await this.client!.submit(
-      `g.V(fromId).repeat(both().simplePath()).until(hasId(toId)).limit(1).path()`,
-      { fromId, toId },
+      `g.V(fromId).repeat(both().simplePath()).until(has(T.id, toId)).limit(1).path()`,
+      { fromId: this.resolveKey(fromId), toId },
     );
 
     const items = result._items || [];
@@ -126,12 +122,7 @@ export class GremlinDatasource extends Datasource {
 
     // Get edges between path nodes
     const nodeIds = nodes.map(n => n.id);
-    const edgeResult = await this.client!.submit(
-      `g.V(ids).bothE().where(otherV().hasId(within(ids)))`,
-      { ids: nodeIds },
-    );
-    const pathEdges = this.transformEdges(edgeResult._items || []);
-
+    const pathEdges = await this.fetchEdgesAmongNodes(nodeIds);
     return { nodes, edges: pathEdges };
   }
 
@@ -139,7 +130,7 @@ export class GremlinDatasource extends Datasource {
     this.ensureConnected();
 
     const result = await this.client!.submit(
-      `g.V().has('name', TextP.containing(query))`,
+      `g.V().has('${this.nameProperty}', TextP.containing(query))`,
       { query },
     );
 
@@ -159,7 +150,7 @@ export class GremlinDatasource extends Datasource {
       bindings.types = filter.types;
     }
     if (filter.search) {
-      traversal += `.has('name', TextP.containing(searchText))`;
+      traversal += `.has('${this.nameProperty}', TextP.containing(searchText))`;
       bindings.searchText = filter.search;
     }
     if (filter.attributes) {
@@ -182,7 +173,7 @@ export class GremlinDatasource extends Datasource {
 
     const result = await this.client!.submit(
       `g.V(nodeId).has('content')`,
-      { nodeId },
+      { nodeId: this.resolveKey(nodeId) },
     );
 
     const items = result._items || [];
@@ -207,6 +198,35 @@ export class GremlinDatasource extends Datasource {
     }
   }
 
+  /**
+   * Resolve a vertex id into the value passed to g.V(...).
+   * Default: identity (TinkerPop / unpartitioned).
+   * If `getCompositeKey` is configured (e.g. for Cosmos DB partitioned
+   * containers), delegates to that callback.
+   */
+  private resolveKey(id: string): string | [string, string] {
+    return this.config.getCompositeKey?.(id) ?? id;
+  }
+
+  /**
+   * Fetch edges among a known set of vertices.
+   *
+   * The traversal is `g.V(<keys>).bothE().dedup()` — composite-key safe
+   * (each key in <keys> may be a tuple) and avoids `within(<list-of-tuples>)`,
+   * which is unreliable on Cosmos DB Gremlin. We then drop edges with an
+   * endpoint outside the `nodeIds` set client-side, since `bothE()` includes
+   * edges to neighbours we did not request.
+   */
+  private async fetchEdgesAmongNodes(nodeIds: string[]): Promise<EdgeData[]> {
+    const result = await this.client!.submit(
+      `g.V(ids).bothE().dedup()`,
+      { ids: nodeIds.map(nid => this.resolveKey(nid)) },
+    );
+    const allEdges = this.transformEdges(result._items || []);
+    const idSet = new Set(nodeIds);
+    return allEdges.filter(e => idSet.has(e.sourceId) && idSet.has(e.targetId));
+  }
+
   private transformVertices(items: unknown[]): NodeData[] {
     return items.map(item => this.transformVertex(item));
   }
@@ -216,7 +236,14 @@ export class GremlinDatasource extends Datasource {
     const id = String(v.id);
     const attributes: Record<string, unknown> = {};
 
-    if (v.label) attributes.type = v.label;
+    // Resolve the semantic type of the vertex. Default = Gremlin label
+    // (TinkerPop convention). Hosts whose data stores a constant label
+    // and the real type in a property (e.g. Bible Graph: every vertex
+    // labelled 'Unit', actual type on a `type` property) override via
+    // `getType` to surface the right value. If getType returns undefined,
+    // fall back to the label.
+    const resolvedType = this.config.getType?.(v as unknown as GremlinVertex) ?? (v.label as string | undefined);
+    if (resolvedType !== undefined) attributes.type = resolvedType;
 
     // Gremlin properties can be nested objects
     const properties = v.properties as Record<string, unknown> | undefined;
