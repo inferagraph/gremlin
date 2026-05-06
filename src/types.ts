@@ -12,7 +12,7 @@ export interface GremlinVertex {
   properties?: Record<string, unknown>;
 }
 
-export interface GremlinDatasourceConfig {
+export interface GremlinDataSourceConfig {
   endpoint: string;
   key?: string;          // Auth key (e.g. Cosmos DB primary key)
   database?: string;

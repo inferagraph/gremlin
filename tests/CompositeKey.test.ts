@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GremlinDatasource } from '../src/GremlinDatasource.js';
-import type { GremlinDatasourceConfig } from '../src/types.js';
+import { GremlinDataSource } from '../src/GremlinDataSource.js';
+import type { GremlinDataSourceConfig } from '../src/types.js';
 
 // Mock @inferagraph/core
 vi.mock('@inferagraph/core', () => {
@@ -30,11 +30,11 @@ vi.mock('gremlin', () => {
   };
 });
 
-const neutralConfig: GremlinDatasourceConfig = {
+const neutralConfig: GremlinDataSourceConfig = {
   endpoint: 'wss://localhost:8182/',
 };
 
-const cosmosConfig: GremlinDatasourceConfig = {
+const cosmosConfig: GremlinDataSourceConfig = {
   endpoint: 'wss://my-cosmos.gremlin.cosmos.azure.com:443/',
   key: 'my-primary-key',
   database: 'mydb',
@@ -49,7 +49,7 @@ const cosmosConfig: GremlinDatasourceConfig = {
  * Recursively assert that `value` is a Cosmos-Gremlin-bindings-safe value:
  * scalars (string, number, boolean) or arrays of scalars. Cosmos rejects
  * lists-of-tuples and bare tuples — see the binding-shape docs in
- * GremlinDatasource.ts.
+ * GremlinDataSource.ts.
  */
 function assertScalarOrListOfScalars(value: unknown, path: string): void {
   if (
@@ -80,13 +80,13 @@ function assertScalarOrListOfScalars(value: unknown, path: string): void {
   );
 }
 
-describe('GremlinDatasource composite-key option', () => {
+describe('GremlinDataSource composite-key option', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('passes the bare id inlined into g.V(...) when getCompositeKey is NOT configured (TinkerPop default)', async () => {
-    const ds = new GremlinDatasource(neutralConfig);
+    const ds = new GremlinDataSource(neutralConfig);
     await ds.connect();
     mockSubmit.mockResolvedValueOnce({ _items: [] });
 
@@ -98,7 +98,7 @@ describe('GremlinDatasource composite-key option', () => {
   });
 
   it('inlines the composite key tuple into g.V(...) when getCompositeKey is configured (Cosmos)', async () => {
-    const ds = new GremlinDatasource(cosmosConfig);
+    const ds = new GremlinDataSource(cosmosConfig);
     await ds.connect();
     mockSubmit.mockResolvedValueOnce({ _items: [] });
 
@@ -110,7 +110,7 @@ describe('GremlinDatasource composite-key option', () => {
   });
 
   it('inlines every id at multi-id sites (getNeighbors edge fetch) and keeps no id bindings', async () => {
-    const ds = new GremlinDatasource(cosmosConfig);
+    const ds = new GremlinDataSource(cosmosConfig);
     await ds.connect();
 
     // 1st submit: neighbors traversal (origin = 'alice')
@@ -148,7 +148,7 @@ describe('GremlinDatasource composite-key option', () => {
   });
 
   it('inlines the fromId in findPath but leaves toId bare (used by has(T.id, toId))', async () => {
-    const ds = new GremlinDatasource(cosmosConfig);
+    const ds = new GremlinDataSource(cosmosConfig);
     await ds.connect();
     mockSubmit.mockResolvedValueOnce({ _items: [] });
 
@@ -164,7 +164,7 @@ describe('GremlinDatasource composite-key option', () => {
   });
 
   it('inlines the nodeId in getContent and removes it from bindings', async () => {
-    const ds = new GremlinDatasource(cosmosConfig);
+    const ds = new GremlinDataSource(cosmosConfig);
     await ds.connect();
     mockSubmit.mockResolvedValueOnce({ _items: [] });
 
@@ -176,7 +176,7 @@ describe('GremlinDatasource composite-key option', () => {
   });
 
   it('inlines bulk edge ids in getInitialView edge fetch', async () => {
-    const ds = new GremlinDatasource(cosmosConfig);
+    const ds = new GremlinDataSource(cosmosConfig);
     await ds.connect();
 
     mockSubmit
@@ -198,7 +198,7 @@ describe('GremlinDatasource composite-key option', () => {
   });
 
   it('escapes single quotes in inlined ids', async () => {
-    const ds = new GremlinDatasource(cosmosConfig);
+    const ds = new GremlinDataSource(cosmosConfig);
     await ds.connect();
     mockSubmit.mockResolvedValueOnce({ _items: [] });
 
@@ -213,7 +213,7 @@ describe('GremlinDatasource composite-key option', () => {
   it('escapes backslashes in inlined ids (neutral / non-composite)', async () => {
     // Neutral config: a single string literal, no tuple wrapping.
     // Input id contains a literal backslash. The escape doubles it.
-    const ds = new GremlinDatasource(neutralConfig);
+    const ds = new GremlinDataSource(neutralConfig);
     await ds.connect();
     mockSubmit.mockResolvedValueOnce({ _items: [] });
 
@@ -229,7 +229,7 @@ describe('GremlinDatasource composite-key option', () => {
     // This is the contract test that would have caught the original 0.1.3 bug.
     // Cosmos rejects bindings whose values are tuples or arrays-of-tuples;
     // verify every value the library passes is scalar or a list of scalars.
-    const ds = new GremlinDatasource(cosmosConfig);
+    const ds = new GremlinDataSource(cosmosConfig);
     await ds.connect();
 
     mockSubmit

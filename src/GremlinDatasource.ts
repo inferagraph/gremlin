@@ -4,17 +4,17 @@ import type {
   ContentData, PaginationOptions, PaginatedResult, DataFilter,
 } from '@inferagraph/core';
 import gremlin from 'gremlin';
-import type { GremlinDatasourceConfig, GremlinVertex } from './types.js';
+import type { GremlinDataSourceConfig, GremlinVertex } from './types.js';
 
 const { driver } = gremlin;
 
-export class GremlinDatasource extends Datasource {
+export class GremlinDataSource extends Datasource {
   readonly name = 'gremlin';
   private client: InstanceType<typeof driver.Client> | null = null;
-  private config: GremlinDatasourceConfig;
+  private config: GremlinDataSourceConfig;
   private nameProperty: string;
 
-  constructor(config: GremlinDatasourceConfig) {
+  constructor(config: GremlinDataSourceConfig) {
     super();
     this.config = config;
     this.nameProperty = config.nameProperty ?? 'name';
@@ -200,7 +200,7 @@ export class GremlinDatasource extends Datasource {
 
   private ensureConnected(): void {
     if (!this.client) {
-      throw new Error('GremlinDatasource is not connected. Call connect() first.');
+      throw new Error('GremlinDataSource is not connected. Call connect() first.');
     }
   }
 

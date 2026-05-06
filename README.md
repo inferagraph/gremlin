@@ -1,4 +1,4 @@
-# @inferagraph/gremlin-datasource
+# @inferagraph/gremlin
 
 Gremlin datasource for [@inferagraph/core](https://github.com/inferagraph/core).
 Targets the Gremlin protocol — works against any TinkerPop-compatible server,
@@ -7,15 +7,41 @@ including Apache TinkerPop and Azure Cosmos DB Gremlin API.
 ## Installation
 
 ```bash
-pnpm add @inferagraph/gremlin-datasource @inferagraph/core
+pnpm add @inferagraph/gremlin @inferagraph/core
+```
+
+### Migrating from `@inferagraph/gremlin-datasource`
+
+The package was renamed from `@inferagraph/gremlin-datasource` to
+`@inferagraph/gremlin` in `0.2.0`. The class was also renamed from
+`GremlinDatasource` to `GremlinDataSource` (PascalCase `S`) and a new
+`gremlinDataSource(...)` factory is the recommended on-ramp.
+
+```bash
+pnpm remove @inferagraph/gremlin-datasource
+pnpm add @inferagraph/gremlin
+```
+
+```diff
+- import { GremlinDatasource } from '@inferagraph/gremlin-datasource';
+- const datasource = new GremlinDatasource({ endpoint: 'wss://...' });
++ import { gremlinDataSource } from '@inferagraph/gremlin';
++ const datasource = gremlinDataSource({ endpoint: 'wss://...' });
+```
+
+The class is still exported as the escape hatch:
+
+```typescript
+import { GremlinDataSource } from '@inferagraph/gremlin';
+const datasource = new GremlinDataSource({ endpoint: 'wss://...' });
 ```
 
 ## Quick start
 
 ```typescript
-import { GremlinDatasource } from '@inferagraph/gremlin-datasource';
+import { gremlinDataSource } from '@inferagraph/gremlin';
 
-const datasource = new GremlinDatasource({
+const datasource = gremlinDataSource({
   endpoint: 'wss://your-gremlin-server:443/',
 });
 
@@ -26,7 +52,7 @@ await datasource.disconnect();
 
 ## Configuration
 
-`GremlinDatasourceConfig` options:
+`GremlinDataSourceConfig` options:
 
 | Option            | Type                                                       | Description                                                                                              |
 | ----------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -53,7 +79,7 @@ edge fetches.
 
 ```typescript
 // Cosmos with partitionKey == id (the simplest scheme — what Bible Graph uses):
-new GremlinDatasource({
+gremlinDataSource({
   endpoint: 'wss://my-cosmos.gremlin.cosmos.azure.com:443/',
   key: process.env.COSMOS_KEY,
   database: 'mydb',
@@ -62,13 +88,13 @@ new GremlinDatasource({
 });
 
 // Cosmos with a partition value derived from the id:
-new GremlinDatasource({
+gremlinDataSource({
   // ...endpoint, key, database, container...
   getCompositeKey: (id) => [getPartitionFor(id), id],
 });
 
 // Apache TinkerPop / unpartitioned: omit getCompositeKey entirely.
-new GremlinDatasource({ endpoint: 'wss://localhost:8182/' });
+gremlinDataSource({ endpoint: 'wss://localhost:8182/' });
 ```
 
 The library does **not** bake in any partition scheme. Every host-specific
@@ -83,13 +109,13 @@ tell the library where to find the real type.
 
 ```typescript
 // Default behavior — equivalent to NOT supplying getType:
-new GremlinDatasource({
+gremlinDataSource({
   endpoint,
   getType: (v) => v.label,
 });
 
 // Host stores type in a `type` property (every vertex has the same label):
-new GremlinDatasource({
+gremlinDataSource({
   endpoint,
   getType: (v) => {
     const t = v.properties?.type as Array<{ value?: unknown }> | undefined;
@@ -103,7 +129,7 @@ If `getType` returns `undefined`, the library falls back to `v.label`.
 `GremlinVertex` is exported for typing custom resolvers:
 
 ```typescript
-import type { GremlinVertex } from '@inferagraph/gremlin-datasource';
+import type { GremlinVertex } from '@inferagraph/gremlin';
 ```
 
 ### Name property
@@ -115,10 +141,10 @@ searchable display name on a different property.
 
 ```typescript
 // Default — searches the `name` property:
-new GremlinDatasource({ endpoint });
+gremlinDataSource({ endpoint });
 
 // Host whose vertices use `title` as the display name:
-new GremlinDatasource({ endpoint, nameProperty: 'title' });
+gremlinDataSource({ endpoint, nameProperty: 'title' });
 ```
 
 ## Usage

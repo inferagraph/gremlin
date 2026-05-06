@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GremlinDatasource } from '../src/GremlinDatasource.js';
-import type { GremlinDatasourceConfig } from '../src/types.js';
+import { GremlinDataSource } from '../src/GremlinDataSource.js';
+import type { GremlinDataSourceConfig } from '../src/types.js';
 
 // Mock @inferagraph/core
 vi.mock('@inferagraph/core', () => {
@@ -30,11 +30,11 @@ vi.mock('gremlin', () => {
   };
 });
 
-const defaultConfig: GremlinDatasourceConfig = {
+const defaultConfig: GremlinDataSourceConfig = {
   endpoint: 'wss://localhost:8182/',
 };
 
-const cosmosConfig: GremlinDatasourceConfig = {
+const cosmosConfig: GremlinDataSourceConfig = {
   endpoint: 'wss://my-cosmos.gremlin.cosmos.azure.com:443/',
   key: 'my-primary-key',
   database: 'mydb',
@@ -49,12 +49,12 @@ function makeEdge(id: string, outV: string, inV: string, label: string, properti
   return { id, outV: { id: outV }, inV: { id: inV }, label, properties };
 }
 
-describe('GremlinDatasource', () => {
-  let ds: GremlinDatasource;
+describe('GremlinDataSource', () => {
+  let ds: GremlinDataSource;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    ds = new GremlinDatasource(defaultConfig);
+    ds = new GremlinDataSource(defaultConfig);
   });
 
   describe('name', () => {
@@ -89,7 +89,7 @@ describe('GremlinDatasource', () => {
 
     it('should create authenticator for Cosmos DB config', async () => {
       const gremlin = await import('gremlin');
-      const cosmosDs = new GremlinDatasource(cosmosConfig);
+      const cosmosDs = new GremlinDataSource(cosmosConfig);
       await cosmosDs.connect();
       expect(gremlin.default.driver.auth.PlainTextSaslAuthenticator).toHaveBeenCalledWith(
         '/dbs/mydb/colls/mygraph',
@@ -100,7 +100,7 @@ describe('GremlinDatasource', () => {
     it('should not create authenticator when no key provided', async () => {
       const gremlin = await import('gremlin');
       vi.mocked(gremlin.default.driver.auth.PlainTextSaslAuthenticator).mockClear();
-      const noKeyDs = new GremlinDatasource(defaultConfig);
+      const noKeyDs = new GremlinDataSource(defaultConfig);
       await noKeyDs.connect();
       expect(gremlin.default.driver.auth.PlainTextSaslAuthenticator).not.toHaveBeenCalled();
     });
@@ -123,7 +123,7 @@ describe('GremlinDatasource', () => {
   describe('ensureConnected', () => {
     it('should throw when not connected', async () => {
       await expect(ds.getNode('1')).rejects.toThrow(
-        'GremlinDatasource is not connected. Call connect() first.',
+        'GremlinDataSource is not connected. Call connect() first.',
       );
     });
 
@@ -334,7 +334,7 @@ describe('GremlinDatasource', () => {
     });
 
     it('should pass toId bare even when getCompositeKey is configured', async () => {
-      const cosmosDs = new GremlinDatasource({
+      const cosmosDs = new GremlinDataSource({
         ...cosmosConfig,
         getCompositeKey: (id: string) => [id, id] as [string, string],
       });
@@ -507,7 +507,7 @@ describe('GremlinDatasource', () => {
 
   describe('getType config option', () => {
     it('defaults to using the Gremlin label as the semantic type', async () => {
-      const defaultDs = new GremlinDatasource(defaultConfig);
+      const defaultDs = new GremlinDataSource(defaultConfig);
       await defaultDs.connect();
       mockSubmit.mockResolvedValueOnce({
         _items: [makeVertex('v1', 'person', { name: [{ value: 'Alice' }] })],
@@ -519,14 +519,14 @@ describe('GremlinDatasource', () => {
     it('uses getType to read the type from a property when configured', async () => {
       // Host-style: every vertex carries a constant label and the real
       // type lives on a property. The library must surface the property.
-      const hostConfig: GremlinDatasourceConfig = {
+      const hostConfig: GremlinDataSourceConfig = {
         ...defaultConfig,
         getType: (v) => {
           const t = v.properties?.type as Array<{ value?: unknown }> | undefined;
           return (t?.[0]?.value as string | undefined) ?? v.label;
         },
       };
-      const hostDs = new GremlinDatasource(hostConfig);
+      const hostDs = new GremlinDataSource(hostConfig);
       await hostDs.connect();
       mockSubmit.mockResolvedValueOnce({
         _items: [makeVertex('v1', 'Unit', {
@@ -539,11 +539,11 @@ describe('GremlinDatasource', () => {
     });
 
     it('falls back to v.label when getType returns undefined', async () => {
-      const hostConfig: GremlinDatasourceConfig = {
+      const hostConfig: GremlinDataSourceConfig = {
         ...defaultConfig,
         getType: () => undefined,
       };
-      const hostDs = new GremlinDatasource(hostConfig);
+      const hostDs = new GremlinDataSource(hostConfig);
       await hostDs.connect();
       mockSubmit.mockResolvedValueOnce({
         _items: [makeVertex('v1', 'person', {})],
@@ -566,11 +566,11 @@ describe('GremlinDatasource', () => {
       // This test removes the coincidence: the vertex has a label of
       // 'Unit' and NO `type` property. Only an implementation that
       // actually invokes `config.getType` can produce 'person' here.
-      const hostConfig: GremlinDatasourceConfig = {
+      const hostConfig: GremlinDataSourceConfig = {
         ...defaultConfig,
         getType: () => 'person',
       };
-      const hostDs = new GremlinDatasource(hostConfig);
+      const hostDs = new GremlinDataSource(hostConfig);
       await hostDs.connect();
       mockSubmit.mockResolvedValueOnce({
         _items: [makeVertex('v1', 'Unit', { name: [{ value: 'Abraham' }] })],
@@ -582,7 +582,7 @@ describe('GremlinDatasource', () => {
 
   describe('nameProperty config option', () => {
     it('defaults to searching the "name" property', async () => {
-      const defaultDs = new GremlinDatasource(defaultConfig);
+      const defaultDs = new GremlinDataSource(defaultConfig);
       await defaultDs.connect();
       mockSubmit.mockResolvedValueOnce({ _items: [] });
       await defaultDs.search('alice');
@@ -593,7 +593,7 @@ describe('GremlinDatasource', () => {
     });
 
     it('uses the configured nameProperty in search() and filter({ search })', async () => {
-      const titleDs = new GremlinDatasource({ ...defaultConfig, nameProperty: 'title' });
+      const titleDs = new GremlinDataSource({ ...defaultConfig, nameProperty: 'title' });
       await titleDs.connect();
 
       mockSubmit.mockResolvedValueOnce({ _items: [] });
@@ -612,7 +612,7 @@ describe('GremlinDatasource', () => {
     });
 
     it('surfaces the configured nameProperty value on the transformed node', async () => {
-      const titleDs = new GremlinDatasource({ ...defaultConfig, nameProperty: 'title' });
+      const titleDs = new GremlinDataSource({ ...defaultConfig, nameProperty: 'title' });
       await titleDs.connect();
       mockSubmit.mockResolvedValueOnce({
         _items: [makeVertex('v1', 'doc', { title: [{ value: 'Genesis' }] })],
