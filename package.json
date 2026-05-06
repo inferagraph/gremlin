@@ -1,6 +1,6 @@
 {
   "name": "@inferagraph/gremlin-datasource",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Apache TinkerPop Gremlin datasource for InferaGraph",
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
   "packageManager": "pnpm@10.33.2",
   "license": "MIT",
   "peerDependencies": {
-    "@inferagraph/core": "^0.6.0"
+    "@inferagraph/core": "^0.7.0"
   },
   "dependencies": {
     "gremlin": "^3.7.0"
