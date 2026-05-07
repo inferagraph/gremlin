@@ -4,7 +4,7 @@
   "description": "Apache TinkerPop Gremlin datasource for InferaGraph",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/inferagraph/gremlin-datasource.git"
+    "url": "git+https://github.com/inferagraph/gremlin.git"
   },
   "type": "module",
   "main": "./dist/index.cjs",
