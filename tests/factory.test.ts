@@ -6,7 +6,7 @@ import {
 import type { GremlinDataSourceConfig } from '../src/index.js';
 
 // Mock @inferagraph/core
-vi.mock('@inferagraph/core', () => {
+vi.mock('@inferagraph/core/data', () => {
   class DataSource {}
   return { DataSource };
 });

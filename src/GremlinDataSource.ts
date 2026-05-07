@@ -1,8 +1,8 @@
-import { DataSource } from '@inferagraph/core';
+import { DataSource } from '@inferagraph/core/data';
 import type {
   DataAdapterConfig, GraphData, NodeId, NodeData, EdgeData,
   ContentData, PaginationOptions, PaginatedResult, DataFilter,
-} from '@inferagraph/core';
+} from '@inferagraph/core/data';
 import gremlin from 'gremlin';
 import type { GremlinDataSourceConfig, GremlinVertex } from './types.js';
 
