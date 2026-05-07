@@ -1,4 +1,4 @@
-import { GremlinDataSource } from './GremlinDatasource.js';
+import { GremlinDataSource } from './GremlinDataSource.js';
 import type { GremlinDataSourceConfig } from './types.js';
 
 /**
